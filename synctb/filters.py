@@ -24,7 +24,7 @@ def asset_type(asset, profile_names) -> str:
 def apply_filters(repo: SourceRepository) -> SourceRepository:
     """Renvoie un nouveau dépôt ne contenant que les entités à synchroniser."""
     profile_names = {p.source_id: p.name for p in repo.of_type("ASSET_PROFILE")}
-    result = SourceRepository()
+    result = SourceRepository(unsupported=list(repo.unsupported))
     skipped = {}
 
     for e in repo.entities:

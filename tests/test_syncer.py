@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from synctb.filters import apply_filters
@@ -40,8 +42,10 @@ def scenario(tmp_path):
                   "connections": []}))
     s["group"] = write(tmp_path, "groups/asset", export(
         "ENTITY_GROUP", src_entity("ENTITY_GROUP", name="Risques", type="ASSET",
-                                   ownerId=ref("TENANT", SOURCE_TENANT)),
-        memberIds=[s["r1"], s["site"]]))
+                                   ownerId=ref("TENANT", SOURCE_TENANT))))
+    # Membres du groupe dans <id>_entities.json, comme dans le dépôt réel
+    (tmp_path / "groups" / "asset" / f"{s['group']}_entities.json").write_text(
+        json.dumps([ref("ASSET", s["r1"]), ref("ASSET", s["site"])]), encoding="utf-8")
 
     tb = FakeTb()
     owner = ref("TENANT", TENANT_ID)

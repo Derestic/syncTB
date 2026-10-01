@@ -3,8 +3,14 @@
 Structure attendue :
     <type>/<externalId>.json
     groups/<type_de_groupe>/<externalId>.json
+    groups/<type_de_groupe>/<externalId>_entities.json
     hierarchy/<ownerId>/dashboard/<externalId>.json
     hierarchy/<ownerId>/groups/<type_de_groupe>/<externalId>.json
+    hierarchy/<ownerId>/groups/<type_de_groupe>/<externalId>_entities.json
+
+Les fichiers `<externalId>_entities.json` contiennent la liste des membres du groupe
+<externalId>, sous forme de références : [{"entityType": ..., "id": ...}, ...].
+Ils sont rattachés à leur groupe au lieu d'être lus comme des entités.
 
 `hierarchy/<ownerId>` contient les entités dont le propriétaire est le customer
 <ownerId> (il n'y a pas d'imbrication). Les dossiers cachés (.git, ...) sont ignorés.
@@ -20,6 +26,9 @@ from synctb.model import FOLDER_TYPES, GROUP_FOLDER_TYPES, SourceEntity, SourceR
 log = logging.getLogger(__name__)
 
 
+MEMBERS_SUFFIX = "_entities"
+
+
 class RepositoryError(Exception):
     """Fichier du dépôt illisible ou JSON invalide."""
 
@@ -27,11 +36,24 @@ class RepositoryError(Exception):
 def load_repository(root: Path) -> SourceRepository:
     """Lit tous les fichiers JSON du dépôt et les renvoie sans aucun filtrage."""
     repo = SourceRepository()
+    members = {}  # id du groupe -> (chemin, liste des membres)
     for entity_type, path in _iter_files(Path(root)):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
             raise RepositoryError(f"Impossible de lire {path} : {e}") from e
+
+        # Liste des membres d'un groupe : rattachée au groupe une fois tous les fichiers lus
+        if entity_type == "ENTITY_GROUP" and path.stem.endswith(MEMBERS_SUFFIX) and isinstance(data, list):
+            members[path.stem[:-len(MEMBERS_SUFFIX)].lower()] = (path, data)
+            continue
+
+        # Format non reconnu (par ex. une liste JSON dans groups/) : le fichier est ignoré
+        # pour ne pas bloquer le reste de la synchronisation.
+        if not isinstance(data, dict):
+            log.warning("Format non pris en charge, fichier ignoré : %s (%s)", path, _describe(data))
+            repo.unsupported.append(path)
+            continue
 
         # Le champ entityType du fichier prévaut sur le dossier qui le contient
         declared = data.get("entityType")
@@ -42,8 +64,31 @@ def load_repository(root: Path) -> SourceRepository:
 
         repo.entities.append(SourceEntity(entity_type=entity_type, source_id=path.stem, path=path, data=data))
 
+    _attach_members(repo, members)
     log.info("Dépôt source : %d fichiers lus depuis %s", len(repo.entities), root)
+    if repo.unsupported:
+        log.warning("%d fichiers au format non pris en charge ont été ignorés", len(repo.unsupported))
     return repo
+
+
+def _attach_members(repo: SourceRepository, members: dict) -> None:
+    """Rattache chaque fichier `<id>_entities.json` au groupe <id>."""
+    for group in repo.of_type("ENTITY_GROUP"):
+        found = members.pop(group.source_id.lower(), None)
+        if found:
+            group.members = [m for m in found[1] if isinstance(m, dict) and m.get("id")]
+    for path, _ in members.values():
+        log.warning("Liste de membres sans groupe correspondant, ignorée : %s", path)
+
+
+def _describe(data) -> str:
+    """Description courte d'un contenu JSON inattendu, pour le diagnostic."""
+    if isinstance(data, list):
+        first = data[0] if data else None
+        detail = f", clés du premier élément : {sorted(first)}" if isinstance(first, dict) else \
+            f", premier élément : {type(first).__name__}" if data else ""
+        return f"liste de {len(data)} éléments{detail}"
+    return type(data).__name__
 
 
 def _iter_files(root: Path) -> Iterator[Tuple[str, Path]]:

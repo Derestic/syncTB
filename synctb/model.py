@@ -69,6 +69,8 @@ class SourceEntity:
     source_id: str   # identifiant dans l'instance source (= nom du fichier)
     path: Path
     data: dict       # contenu complet du fichier
+    # Uniquement ENTITY_GROUP : membres lus dans <id>_entities.json ([{"entityType", "id"}, ...])
+    members: List[dict] = field(default_factory=list)
 
     @property
     def entity(self) -> dict:
@@ -94,6 +96,16 @@ class SourceEntity:
         return self.data.get("calculatedFields") or []
 
     @property
+    def member_ids(self) -> List[str]:
+        """Uniquement ENTITY_GROUP : identifiants source des membres.
+
+        Ils proviennent du fichier <id>_entities.json et, le cas échéant, du champ
+        `memberIds` du groupe lui-même (format des versions plus récentes).
+        """
+        ids = [m["id"] for m in self.members] + list(self.data.get("memberIds") or [])
+        return list(dict.fromkeys(i for i in ids if i))
+
+    @property
     def group_type(self) -> Optional[str]:
         """Uniquement pour ENTITY_GROUP : type d'entité regroupé."""
         return self.entity.get("type") if self.entity_type == "ENTITY_GROUP" else None
@@ -110,6 +122,8 @@ class SourceRepository:
     # Entités du dépôt qui ne sont pas synchronisées (devices, assets non « Risque »).
     # Elles servent à avertir lorsqu'une autre entité y fait référence.
     excluded: Dict[str, SourceEntity] = field(default_factory=dict)
+    # Fichiers ignorés car leur format n'est pas reconnu
+    unsupported: List[Path] = field(default_factory=list)
 
     def of_type(self, entity_type: str) -> List[SourceEntity]:
         return [e for e in self.entities if e.entity_type == entity_type]

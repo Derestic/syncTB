@@ -51,15 +51,116 @@ référence vers un device absent de la cible, ou une suppression refusée par T
 
 ## Fonctionnement
 
-1. **Lecture du dépôt.** Le dépôt VC est lu, puis filtré : pas d'utilisateurs, pas de devices, assets `Risque` uniquement.
-2. **Vérification du tenant.** Connexion en tant que tenant admin et vérification du nom du tenant. Le tenant n'est jamais créé.
-3. **Création et mise à jour.** Elles suivent l'ordre des dépendances.
-   - Chaque entité est rapprochée de la cible par son `id`, puis par son `externalId`, puis par son nom.
-   - Tous les identifiants connus sont réécrits dans le JSON.
-   - Les entités créées enregistrent l'id source dans `externalId`, ce qui rend les exécutions suivantes idempotentes.
-4. **Seconde passe.** Elle traite les références vers des entités créées plus tard.
-5. **Contenu associé.** Métadonnées des rule chains, widgets des bundles, membres et permissions des groupes, relations, attributs `SERVER_SCOPE` et calculated fields.
-6. **Suppression.** Ce qui est en trop dans la cible est supprimé, avec des protections : rule chain racine, profile par défaut, groupes « All », customers qui possèdent des assets ou des devices, groupes non vides.
+### Vue d'ensemble
+
+`synctb` fait de la cible le reflet de la source, à quelques exceptions près. Les devices,
+les assets `Site` et les utilisateurs ne sont jamais copiés, car ils portent des données
+propres à chaque instance. Le reste est créé, mis à jour ou supprimé pour correspondre au
+dépôt.
+
+Ce qui rend l'outil réutilisable entre tenants, c'est la **table de correspondance des
+identifiants** (`IdMap`) :
+- **Même tenant.** Les entités gardent leurs identifiants.
+- **Autre tenant.** Chaque entité créée reçoit un nouvel identifiant. Toutes les références
+  qui pointent vers elle sont alors réécrites : asset vers profile, dashboard vers asset,
+  nœud vers rule chain, etc.
+- **Exécutions suivantes.** L'identifiant source est enregistré dans le champ `externalId`
+  de l'entité créée. Les exécutions suivantes retrouvent ainsi la même entité au lieu de la
+  dupliquer : l'outil est **idempotent**.
+
+```mermaid
+flowchart TD
+    A["Dépôt VC cloné<br/>(fichiers JSON)"] --> B["Lecture du dépôt<br/>repo.py"]
+    B --> C{"Filtres<br/>filters.py"}
+    C -- "utilisateurs, devices,<br/>assets non Risque" --> X["Exclus<br/>(gardés pour les avertissements)"]
+    C -- "le reste" --> D["Connexion tenant admin<br/>api.py"]
+    D --> E{"Nom du tenant<br/>= --tenant ?"}
+    E -- non --> F["Arrêt<br/>code de sortie 3"]
+    E -- oui --> G["Chargement de la cible<br/>entités, devices, groupes"]
+    G --> H["Création / mise à jour<br/>dans l'ordre des dépendances"]
+    H --> I{"Références vers des entités<br/>pas encore créées ?"}
+    I -- oui --> J["Seconde passe :<br/>réenregistrement"]
+    I -- non --> K
+    J --> K["Contenu associé :<br/>métadonnées des rule chains, widgets des bundles,<br/>membres et permissions des groupes,<br/>relations, attributs, calculated fields"]
+    K --> L["Suppression de ce qui est en trop<br/>(avec protections)"]
+    L --> M["Résumé et code de sortie<br/>0 / 1"]
+```
+
+### Traitement d'une entité
+
+Chaque entité du dépôt passe par les mêmes étapes, dans `syncer.save()` :
+
+1. **Rapprochement.** On cherche l'entité correspondante dans la cible, dans cet ordre :
+   - même `id` ;
+   - `externalId` égal à l'id source ;
+   - même nom, s'il n'y a qu'un seul candidat.
+
+   Le rapprochement par nom permet de réutiliser ce que ThingsBoard crée tout seul : la
+   rule chain racine, les profiles par défaut et les groupes d'un nouveau customer.
+2. **Préparation du corps.** On retire les champs propres à la source (`id`,
+   `createdTime`, `version`). Puis on remplace dans tout le JSON chaque UUID connu par son
+   équivalent dans la cible.
+3. **Enregistrement.**
+   - Entité trouvée : mise à jour en reprenant son `id`. Le contenu de la source l'emporte.
+   - Sinon : création, avec `externalId` = id source.
+4. **Références non résolues.**
+   - Vers une entité qui sera créée plus tard : l'entité est réenregistrée lors de la
+     seconde passe.
+   - Vers un device ou un asset `Site` absent de la cible : la référence est laissée telle
+     quelle et un avertissement est émis.
+
+```mermaid
+flowchart TD
+    S["Entité source"] --> M1{"Même id<br/>dans la cible ?"}
+    M1 -- oui --> U
+    M1 -- non --> M2{"externalId<br/>= id source ?"}
+    M2 -- oui --> U
+    M2 -- non --> M3{"Un seul candidat<br/>avec le même nom ?"}
+    M3 -- oui --> U["Mise à jour<br/>(id de la cible conservé)"]
+    M3 -- non --> N["Création<br/>externalId = id source"]
+    U --> R["Réécriture des UUID<br/>avec IdMap"]
+    N --> R
+    R --> P["POST vers l'API"]
+    P --> Q["IdMap : id source → id cible"]
+    Q --> V{"UUID non résolus ?"}
+    V -- "entité à venir" --> W["Seconde passe"]
+    V -- "device / Site absent" --> Y["Avertissement,<br/>référence laissée telle quelle"]
+    V -- aucun --> Z["Terminé"]
+```
+
+### Ordre de traitement
+
+Les entités sont créées dans un ordre où chaque type ne dépend que des précédents. Par
+exemple, un asset a besoin de son asset profile, et une intégration a besoin de ses
+converters. La suppression suit l'ordre inverse.
+
+```mermaid
+flowchart LR
+    R1[Resources] --> R2[Widget types] --> R3[Widget bundles] --> R4[Customers] --> R5[Rôles]
+    R5 --> R6[Rule chains] --> R7[Dashboards] --> R8["Asset / device<br/>profiles"] --> R9[Converters]
+    R9 --> R10[Intégrations] --> R11[Entity groups] --> R12["Assets Risque"] --> R13[Notifications]
+```
+
+### Relations, attributs et suppressions
+
+- **Relations.**
+  - Une relation de la source n'est créée que si ses deux extrémités existent dans la cible.
+  - Les relations avec des devices ne sont jamais créées.
+  - Les relations qui n'existent que dans la cible sont conservées.
+- **Attributs.** Les attributs `SERVER_SCOPE` de la source sont écrits. Ceux qui
+  n'existent que dans la cible sont conservés.
+- **Groupes.**
+  - Seuls les membres synchronisés sont ajoutés, et aucun membre n'est retiré.
+  - Les permissions des groupes d'utilisateurs ne sont créées que si elles n'existent pas.
+- **Suppressions.** Ce qui est absent de la source est supprimé, avec ces exceptions :
+
+| Jamais supprimé | Raison |
+|---|---|
+| Assets, devices, device profiles | Données propres à la cible |
+| Rule chain racine, asset profile par défaut | Indispensables à ThingsBoard |
+| Groupes « All » | Gérés par ThingsBoard |
+| Groupes d'assets, devices ou utilisateurs non vides | Leurs membres ne sont pas synchronisés |
+| Customers qui possèdent des assets ou des devices, customer public | ThingsBoard PE supprimerait leurs entités en cascade |
 
 ## Développement
 

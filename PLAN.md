@@ -53,12 +53,15 @@ Ces décisions ont été prises pendant le développement, sans discussion expli
 
 ## Reste à faire
 
-- Valider les formats avec de vrais fichiers du dépôt VC, en particulier `groups/` et les types propres à PE.
+- Valider les autres formats avec de vrais fichiers du dépôt VC, en particulier les permissions des groupes d'utilisateurs et les types propres à PE.
 - Tester contre une vraie instance ThingsBoard 4.3.0 PE, d'abord avec `--dry-run`.
 
 ## Structure du dépôt source (Version Control)
 
 Chaque dossier final contient un fichier JSON par entité, nommé `<externalId>.json`.
+Dans les dossiers de groupes, chaque groupe peut aussi avoir un fichier
+`<externalId>_entities.json` : la liste de ses membres, sous forme de références
+`[{"entityType": ..., "id": ...}, ...]` (identifiants de la source).
 
 ```
 asset/  asset_profile/  converter/  customer/  dashboard/  device/  device_profile/
@@ -74,6 +77,7 @@ hierarchy/<ID>/groups/{asset,customer,dashboard,device,entity_view,user}/
 | `device/` | Ignoré |
 | `asset/` | Type `Risque` uniquement |
 | `groups/*`, `hierarchy/<ID>/groups/*` | Entity groups (voir les règles des groupes) |
+| `.../groups/*/<id>_entities.json` | Membres du groupe `<id>` (confirmé avec le dépôt réel). Seuls les membres synchronisés sont ajoutés |
 | `hierarchy/<ID>/...` | Entités dont le propriétaire est le customer `<ID>` (customerId / ownerId). Pas d'imbrication |
 | `groups/{user,device,entity_view}` | Le groupe est créé même s'il reste vide (ses membres ne sont pas synchronisés) |
 | Autres | Synchronisés entièrement |
@@ -111,7 +115,7 @@ Champs supplémentaires par type :
 | `RULE_CHAIN` | `metaData` (`firstNodeIndex`, `nodes`, `connections`, `ruleChainConnections`) | La chaîne est enregistrée, puis ses métadonnées |
 | `WIDGET_TYPE` | — | `entity` est un `WidgetTypeDetails` |
 | `WIDGETS_BUNDLE` | `widgets` (liste de widget types), `fqns` (FQN des widgets) | Les widget types sont associés au bundle par FQN |
-| `ENTITY_GROUP` | `permissions` (groupes USER), `groupOtaPackages` (groupes DEVICE), `groupEntities`, `memberIds` (externalIds des membres) | `memberIds` filtré aux entités synchronisées ; `groupOtaPackages` ignoré |
+| `ENTITY_GROUP` | `permissions` (groupes USER), `groupOtaPackages` (groupes DEVICE), `groupEntities`, `memberIds` | Dans le dépôt réel, les membres sont dans `<id>_entities.json` ; `memberIds` est aussi lu s'il existe. Membres filtrés aux entités synchronisées ; `groupOtaPackages` ignoré |
 | `DASHBOARD` | — | `entity.configuration.entityAliases` peut contenir des identifiants de devices / `Site` : avertissement |
 | `ASSET`, `ASSET_PROFILE`, `DEVICE_PROFILE`, `CUSTOMER`, `TB_RESOURCE`, `NOTIFICATION_*`, `CONVERTER`, `INTEGRATION`, `ROLE` | — | Structure commune uniquement |
 

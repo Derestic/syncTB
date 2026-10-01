@@ -397,8 +397,8 @@ class Syncer:
                 continue
             gid = _uid(group)
 
-            members = [self.idmap.get(m) for m in e.data.get("memberIds") or []
-                       if m and m.lower() in self.sync_ids and m in self.idmap]
+            members = [self.idmap.get(m) for m in e.member_ids
+                       if m.lower() in self.sync_ids and m in self.idmap]
             if members:
                 if self._try(e, "ajout des membres",
                              lambda: self.api.post(f"/api/entityGroup/{p(gid)}/addEntities", members)):
