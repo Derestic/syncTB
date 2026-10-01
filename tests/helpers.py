@@ -1,4 +1,4 @@
-"""Construcción de repositorios VC de prueba en disco."""
+"""Construction de dépôts VC de test sur disque."""
 
 import json
 from pathlib import Path
@@ -23,7 +23,7 @@ def src_entity(entity_type, entity_uuid=None, **fields):
 
 
 def write(root: Path, folder: str, data: dict) -> str:
-    """Guarda `data` en <root>/<folder>/<id>.json y devuelve el id."""
+    """Écrit `data` dans <root>/<folder>/<id>.json et renvoie l'id."""
     entity_uuid = data["entity"]["id"]["id"]
     path = Path(root) / folder / f"{entity_uuid}.json"
     path.parent.mkdir(parents=True, exist_ok=True)

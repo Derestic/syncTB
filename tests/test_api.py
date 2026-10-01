@@ -6,7 +6,7 @@ from synctb.api import ApiException, TbApi
 
 
 def make_api(responses, dry_run=False):
-    """TbApi sobre un ApiClient simulado que devuelve `responses` en orden."""
+    """TbApi sur un ApiClient simulé qui renvoie `responses` dans l'ordre."""
     client = MagicMock()
     api_client = client.api_client
     api_client.param_serialize.side_effect = lambda **kw: (kw["method"], kw["resource_path"], {}, kw["body"], None)

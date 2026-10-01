@@ -1,4 +1,8 @@
-"""ThingsBoard falso en memoria con la misma interfaz que synctb.api.TbApi."""
+"""Faux ThingsBoard en mémoire, avec la même interface que synctb.api.TbApi.
+
+Il simule uniquement les endpoints utilisés par synctb et enregistre tous les appels
+d'écriture dans `calls` pour que les tests puissent les vérifier.
+"""
 
 import copy
 import re
@@ -10,10 +14,10 @@ from synctb.specs import SPECS
 
 TENANT_ID = "11111111-1111-1111-1111-111111111111"
 
-# Endpoint de listado -> tipo
+# Endpoint de liste -> type
 LIST_PATHS = {path: t for t, spec in SPECS.items() for path, _ in spec.list_paths}
 LIST_PATHS["/api/tenant/devices"] = "DEVICE"
-# Endpoint de guardado -> tipo
+# Endpoint d'enregistrement -> type
 SAVE_PATHS = {spec.save_path: t for t, spec in SPECS.items()}
 SAVE_PATHS["/api/entityGroup"] = "ENTITY_GROUP"
 SAVE_PATHS["/api/calculatedField"] = "CALCULATED_FIELD"
@@ -38,7 +42,7 @@ def uid():
 
 
 def ent(entity_type, entity_uuid=None, **fields):
-    """Entidad tal como la devuelve la API."""
+    """Entité telle que la renvoie l'API."""
     e = {"id": {"entityType": entity_type, "id": entity_uuid or uid()},
          "tenantId": {"entityType": "TENANT", "id": TENANT_ID}}
     e.update(fields)
@@ -53,9 +57,9 @@ class FakeTb:
         self.dry_run = False
         self.store = {t: {} for t in list(SPECS) + ["DEVICE", "ENTITY_GROUP", "CALCULATED_FIELD"]}
         self.group_members = {}
-        self.calls = []  # (method, path, body)
+        self.calls = []  # (méthode, chemin, corps)
 
-    # --------------------------------------------------------------- semilla
+    # ---------------------------------------------------- données initiales
 
     def add(self, entity_type, entity):
         self.store[entity_type][entity["id"]["id"]] = entity
@@ -70,7 +74,7 @@ class FakeTb:
     def deletes(self):
         return [pth for m, pth, _ in self.calls if m == "DELETE"]
 
-    # ------------------------------------------------------------ interfaz API
+    # ------------------------------------------------------------ interface API
 
     def get(self, path, **params):
         if path == "/api/auth/user":

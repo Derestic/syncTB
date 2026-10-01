@@ -13,7 +13,7 @@ def ref(entity_type, entity_uuid):
 
 @pytest.fixture
 def scenario(tmp_path):
-    """Repo origen de otro tenant y un destino con contenido previo."""
+    """Dépôt source d'un autre tenant et cible contenant déjà des entités."""
     s = {}
     s["profile"] = write(tmp_path, "asset_profile", export("ASSET_PROFILE", src_entity("ASSET_PROFILE", name="Risque")))
     s["device"] = write(tmp_path, "device", export("DEVICE", src_entity("DEVICE", name="dev-1")))
@@ -118,9 +118,9 @@ def test_dashboard_second_pass_and_device_reference_warning(scenario):
     r1 = by_name(tb, "ASSET", "risque-1")
     dashboard = by_name(tb, "DASHBOARD", "Main")
     aliases = dashboard["configuration"]["entityAliases"]
-    # El asset se creó después del dashboard: se corrige en la segunda pasada
+    # L'asset a été créé après le dashboard : corrigé lors de la seconde passe
     assert aliases["a2"]["filter"]["singleEntity"]["id"] == tid(r1)
-    # El device no existe en el destino: se deja tal cual con aviso
+    # Le device n'existe pas dans la cible : référence laissée telle quelle, avec avertissement
     assert aliases["a1"]["filter"]["singleEntity"]["id"] == s["device"]
     assert report.warnings >= 1
 

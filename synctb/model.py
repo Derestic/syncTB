@@ -1,10 +1,24 @@
-"""Modelo en memoria de las entidades leídas del repositorio origen."""
+"""Modèle en mémoire des entités lues dans le dépôt source.
+
+Chaque fichier du dépôt Version Control est un `EntityExportData` de ThingsBoard :
+
+    {
+      "entityType": "ASSET",
+      "entity": { ... },            # l'entité telle que la renvoie l'API REST
+      "relations": [ ... ],
+      "attributes": {"SERVER_SCOPE": [ ... ]},
+      "calculatedFields": [ ... ],
+      ...                           # champs propres au type (metaData, memberIds, ...)
+    }
+
+Le nom du fichier est l'identifiant de l'entité dans l'instance source (son externalId).
+"""
 
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Carpeta del repo VC -> entityType de ThingsBoard
+# Dossier du dépôt VC -> entityType ThingsBoard
 FOLDER_TYPES = {
     "asset": "ASSET",
     "asset_profile": "ASSET_PROFILE",
@@ -24,7 +38,7 @@ FOLDER_TYPES = {
     "widget_bundle": "WIDGETS_BUNDLE",
 }
 
-# Subcarpeta de groups/ -> tipo de entidad que contiene el grupo
+# Sous-dossier de groups/ -> type d'entité contenu dans le groupe
 GROUP_FOLDER_TYPES = {
     "asset": "ASSET",
     "customer": "CUSTOMER",
@@ -36,11 +50,12 @@ GROUP_FOLDER_TYPES = {
 
 
 def entity_id(entity_type: str, uuid: str) -> dict:
+    """Référence ThingsBoard {"entityType", "id"}."""
     return {"entityType": entity_type, "id": uuid}
 
 
 def ref_id(ref) -> Optional[str]:
-    """UUID de una referencia {"entityType", "id"} o None."""
+    """UUID d'une référence {"entityType", "id"}, ou None."""
     if isinstance(ref, dict):
         return ref.get("id")
     return None
@@ -48,19 +63,21 @@ def ref_id(ref) -> Optional[str]:
 
 @dataclass
 class SourceEntity:
-    """Un fichero EntityExportData del repo VC."""
+    """Un fichier EntityExportData du dépôt VC."""
 
     entity_type: str
-    source_id: str
+    source_id: str   # identifiant dans l'instance source (= nom du fichier)
     path: Path
-    data: dict
+    data: dict       # contenu complet du fichier
 
     @property
     def entity(self) -> dict:
+        """Corps de l'entité, au format de l'API REST."""
         return self.data.get("entity") or {}
 
     @property
     def name(self) -> str:
+        """Nom lisible pour les logs (name, title ou fqn selon le type)."""
         e = self.entity
         return e.get("name") or e.get("title") or e.get("fqn") or self.source_id
 
@@ -78,7 +95,7 @@ class SourceEntity:
 
     @property
     def group_type(self) -> Optional[str]:
-        """Solo ENTITY_GROUP: tipo de entidad que agrupa."""
+        """Uniquement pour ENTITY_GROUP : type d'entité regroupé."""
         return self.entity.get("type") if self.entity_type == "ENTITY_GROUP" else None
 
     def __str__(self):
@@ -87,9 +104,11 @@ class SourceEntity:
 
 @dataclass
 class SourceRepository:
+    """Ensemble des entités du dépôt source, après lecture et filtrage."""
+
     entities: List[SourceEntity] = field(default_factory=list)
-    # Entidades del repo que no se sincronizan (devices, assets que no son Risque).
-    # Se usan para avisar cuando otra entidad las referencia.
+    # Entités du dépôt qui ne sont pas synchronisées (devices, assets non « Risque »).
+    # Elles servent à avertir lorsqu'une autre entité y fait référence.
     excluded: Dict[str, SourceEntity] = field(default_factory=dict)
 
     def of_type(self, entity_type: str) -> List[SourceEntity]:
@@ -100,6 +119,7 @@ class SourceRepository:
 
     @property
     def tenant_id(self) -> Optional[str]:
+        """Tenant d'origine du dépôt (lu dans le champ tenantId des entités)."""
         for e in self.entities:
             tid = ref_id(e.entity.get("tenantId"))
             if tid:

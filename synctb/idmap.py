@@ -1,4 +1,10 @@
-"""Correspondencia de IDs origen -> destino y reescritura de referencias en el JSON."""
+"""Correspondance des identifiants source -> cible et réécriture des références dans le JSON.
+
+Lorsque la cible est un autre tenant, les entités créées reçoivent de nouveaux UUID.
+Toutes les références entre entités (asset -> asset profile, dashboard -> asset,
+nœud de rule chain -> rule chain, ...) doivent donc être recalculées. Plutôt que de
+connaître chaque champ de chaque type, on remplace tout UUID connu, où qu'il apparaisse.
+"""
 
 import re
 from typing import Any, Dict, Set
@@ -7,6 +13,8 @@ UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
 
 
 class IdMap:
+    """Table UUID source -> UUID cible (insensible à la casse)."""
+
     def __init__(self):
         self._map: Dict[str, str] = {}
 
@@ -23,11 +31,12 @@ class IdMap:
         return len(self._map)
 
     def rewrite(self, value: Any, unresolved: Set[str] = None) -> Any:
-        """Devuelve una copia de `value` con los UUID mapeados sustituidos.
+        """Renvoie une copie de `value` où les UUID connus sont remplacés.
 
-        Se reemplazan los UUID que aparecen en cualquier cadena (también dentro de
-        textos como scripts o configuraciones de dashboards). Los UUID no mapeados se
-        dejan tal cual y, si se pasa `unresolved`, se añaden a ese conjunto.
+        Les UUID sont remplacés dans n'importe quelle chaîne, y compris à l'intérieur de
+        textes (scripts, configuration de dashboards, ...). Les UUID inconnus sont laissés
+        tels quels et, si `unresolved` est fourni, ajoutés à cet ensemble (en minuscules).
+        Les clés des dictionnaires ne sont pas modifiées.
         """
         if isinstance(value, dict):
             return {k: self.rewrite(v, unresolved) for k, v in value.items()}

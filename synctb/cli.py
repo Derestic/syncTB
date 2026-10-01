@@ -1,4 +1,4 @@
-"""Punto de entrada de consola: `synctb`."""
+"""Point d'entrée en ligne de commande : `synctb`."""
 
 import argparse
 import logging
@@ -13,35 +13,37 @@ from synctb.syncer import Syncer, TenantError
 
 log = logging.getLogger("synctb")
 
-EXIT_OK = 0
-EXIT_SYNC_ERRORS = 1
-EXIT_CONFIG = 2
-EXIT_FATAL = 3
+# Codes de sortie, exploitables par la pipeline CI/CD
+EXIT_OK = 0            # synchronisation terminée sans erreur
+EXIT_SYNC_ERRORS = 1   # synchronisation terminée, mais au moins une entité a échoué
+EXIT_CONFIG = 2        # configuration incomplète ou invalide
+EXIT_FATAL = 3         # échec de connexion, mauvais tenant ou dépôt illisible
 
 
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="synctb",
-        description="Sincroniza un repositorio de Version Control de ThingsBoard PE con un tenant en marcha.",
-        epilog="La contraseña se lee siempre de la variable de entorno TB_PASSWORD.",
+        description="Synchronise un dépôt de Version Control ThingsBoard PE avec un tenant en service.",
+        epilog="Le mot de passe est toujours lu dans la variable d'environnement TB_PASSWORD.",
     )
-    parser.add_argument("repo", help="Ruta local del repositorio origen ya clonado")
-    parser.add_argument("--url", help="URL del ThingsBoard destino (env: TB_URL)")
-    parser.add_argument("--username", help="Usuario tenant admin del tenant destino (env: TB_USERNAME)")
-    parser.add_argument("--tenant", help="Nombre del tenant destino; se valida tras el login (env: TB_TENANT)")
-    parser.add_argument("--dry-run", action="store_true", help="Muestra lo que se haría sin modificar el destino")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Log en nivel DEBUG")
+    parser.add_argument("repo", help="Chemin local du dépôt source déjà cloné")
+    parser.add_argument("--url", help="URL du ThingsBoard cible (env : TB_URL)")
+    parser.add_argument("--username", help="Utilisateur tenant admin du tenant cible (env : TB_USERNAME)")
+    parser.add_argument("--tenant", help="Nom du tenant cible, vérifié après la connexion (env : TB_TENANT)")
+    parser.add_argument("--dry-run", action="store_true", help="Affiche ce qui serait fait sans modifier la cible")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Log au niveau DEBUG")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser
 
 
 def setup_logging(verbose: bool) -> None:
+    """Log uniquement sur la sortie standard (exécution en pipeline)."""
     logging.basicConfig(
         stream=sys.stdout,
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)-7s %(message)s",
     )
-    # El cliente HTTP es muy verboso en DEBUG
+    # Le client HTTP est très bavard en DEBUG
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
@@ -58,14 +60,14 @@ def main(argv=None) -> int:
 
     try:
         source = apply_filters(load_repository(config.repo_path))
-        log.info("Conectando a %s como %s", config.url, config.username)
+        log.info("Connexion à %s en tant que %s", config.url, config.username)
         api = TbApi.login(config.url, config.username, config.password, dry_run=config.dry_run)
         report = Syncer(api, source, config.tenant_name).run()
     except (RepositoryError, TenantError) as e:
         log.error("%s", e)
         return EXIT_FATAL
     except ApiException as e:
-        log.error("Error de la API de ThingsBoard: %s", api_error(e))
+        log.error("Erreur de l'API ThingsBoard : %s", api_error(e))
         return EXIT_FATAL
 
     report.log_summary(config.dry_run)

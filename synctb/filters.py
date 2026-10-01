@@ -1,4 +1,9 @@
-"""Reglas de exclusión del origen: sin usuarios, sin devices y solo assets de tipo Risque."""
+"""Règles d'exclusion de la source : pas d'utilisateurs, pas de devices, assets « Risque » uniquement.
+
+Les assets de type « Site » stockent des données propres à chaque instance : ils ne sont
+jamais envoyés vers la cible. Les entités exclues sont conservées à part afin de pouvoir
+avertir lorsqu'une entité synchronisée y fait référence.
+"""
 
 import logging
 
@@ -11,12 +16,13 @@ EXCLUDED_TYPES = {"DEVICE", "USER"}
 
 
 def asset_type(asset, profile_names) -> str:
-    """Tipo del asset: campo `type` o, si falta, el nombre de su asset profile."""
+    """Type de l'asset : son champ `type` ou, à défaut, le nom de son asset profile."""
     e = asset.entity
     return e.get("type") or profile_names.get(ref_id(e.get("assetProfileId")), "")
 
 
 def apply_filters(repo: SourceRepository) -> SourceRepository:
+    """Renvoie un nouveau dépôt ne contenant que les entités à synchroniser."""
     profile_names = {p.source_id: p.name for p in repo.of_type("ASSET_PROFILE")}
     result = SourceRepository()
     skipped = {}
@@ -33,5 +39,5 @@ def apply_filters(repo: SourceRepository) -> SourceRepository:
             result.entities.append(e)
 
     for key, count in sorted(skipped.items()):
-        log.info("Excluidos del origen: %d %s", count, key)
+        log.info("Exclus de la source : %d %s", count, key)
     return result

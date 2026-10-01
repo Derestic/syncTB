@@ -48,5 +48,5 @@ def test_config_requires_password_env(tmp_path):
 
 def test_config_requires_existing_repo(tmp_path):
     env = {"TB_URL": "http://tb", "TB_USERNAME": "u", "TB_PASSWORD": "p", "TB_TENANT": "T"}
-    with pytest.raises(ConfigError, match="no existe"):
+    with pytest.raises(ConfigError, match="n'existe pas"):
         Config.build(tmp_path / "missing", environ=env)

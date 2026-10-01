@@ -1,63 +1,64 @@
-# synctb — Plan del proyecto
+# synctb — Plan du projet
 
-Herramienta de consola (Python 3.10, `.venv`, empaquetada con `setup.py`) que sincroniza
-un tenant de ThingsBoard 4.3.0 PE almacenado en un repositorio git (Version Control nativo
-de ThingsBoard, ya clonado en local) contra un tenant de una instancia en marcha.
+`synctb` est un outil en ligne de commande, écrit en Python 3.10, utilisé avec un `.venv` et
+empaqueté avec `setup.py`. Il synchronise un tenant ThingsBoard 4.3.0 PE avec un tenant d'une
+instance en service. Le tenant source est stocké dans un dépôt git, au format du *Version
+Control* natif de ThingsBoard, et ce dépôt est déjà cloné en local.
 
-Se publica en Artifactory y se ejecuta en pipelines CI/CD (log solo por consola).
+L'outil est publié sur Artifactory et exécuté dans des pipelines CI/CD. Le log ne s'affiche que sur la console.
 
-## Requisitos confirmados
+## Exigences validées
 
-| Tema | Decisión |
+| Sujet | Décision |
 |---|---|
-| Formato de origen | Repo del Version Control nativo de TB (un único tenant) |
-| Qué se sincroniza | Todo excepto usuarios y devices |
-| Assets | Solo los de tipo `Risque`; nunca los de tipo `Site` (ni otros tipos) |
-| Asset profiles / device profiles | Se sincronizan todos (incluido el profile `Site`) |
-| Identificadores | Mismo tenant → se conservan. Otro tenant → IDs nuevos y se recalculan las referencias |
-| Assets `Site` | Nunca se crean, actualizan ni borran en el destino (almacenan datos propios de cada instancia) |
-| Relaciones del origen | Se crean solo si ambos extremos existen en el destino; si no, se descartan (se "rompen") |
-| Relaciones del destino | Se mantienen siempre (no se borran por no estar en origen) |
-| Borrados | Lo que no está en origen se borra del destino, **excepto** assets (incluidos `Risque`), devices y device profiles |
-| Tenant de destino | Login con un **tenant admin** del tenant objetivo; se valida que el nombre del tenant coincide con `--tenant`. Si no coincide o no existe: error, no se crea |
-| Mismo tenant o no | Se compara el `tenantId` de las entidades del repo con el del usuario logueado |
-| Referencias a devices / `Site` en dashboards (alias) y rule chains | Se dejan tal cual y se registra un warning por cada referencia no resoluble |
-| Entity views | No existen; no se gestionan |
-| Entity groups | Se sincronizan; solo se añaden miembros sincronizados. No se quitan devices/assets del destino de sus grupos y no se borra un grupo que contenga assets o devices del destino |
-| Relación presente en origen y destino | Gana el origen (se sobrescribe `additionalInfo`) |
-| `calculatedFields` con referencias a devices / `Site` | Se sincronizan tal cual y se registra un warning por cada referencia |
-| Atributos (`SERVER_SCOPE`) | Se escriben los del origen (crear/actualizar). Los que solo existen en el destino se mantienen, nunca se borran |
-| Permisos de grupos de usuarios (`permissions`) | Se crean solo si no existen en el destino; los existentes no se modifican ni se borran |
-| Cliente REST | `tb-pe-client` (PyPI, 4.3.1.x, Python >=3.10). Clase `tb_pe_client.ThingsboardClient(url, username, password)`; expone todos los controllers (asset, entity_group, group_permission, rule_chain, tenant, auth…) |
-| Credenciales | Usuario y contraseña (variables de entorno de la pipeline) |
-| Logging | Solo stdout/stderr |
-| Tests | Unitarios con mocks, sin instancia real |
+| Format de la source | Dépôt du Version Control natif de TB (un seul tenant) |
+| Ce qui est synchronisé | Tout, sauf les utilisateurs et les devices |
+| Assets | Uniquement ceux de type `Risque` ; jamais ceux de type `Site` |
+| Asset profiles / device profiles | Tous synchronisés, y compris le profile `Site` |
+| Identifiants | Même tenant : ils sont conservés. Autre tenant : nouveaux identifiants et références recalculées |
+| Assets `Site` | Jamais créés, mis à jour ni supprimés dans la cible : ils stockent des données propres à chaque instance |
+| Relations de la source | Créées seulement si les deux extrémités existent dans la cible ; sinon elles sont ignorées (« cassées ») |
+| Relations de la cible | Toujours conservées, même si elles ne sont pas dans la source |
+| Suppressions | Ce qui n'existe pas dans la source est supprimé de la cible, **sauf** les assets (y compris `Risque`), les devices et les device profiles |
+| Tenant cible | Connexion avec un **tenant admin** du tenant cible et vérification que son nom correspond à `--tenant`. Sinon : erreur. Le tenant n'est jamais créé |
+| Même tenant ou non | Comparaison du `tenantId` des entités du dépôt avec celui de l'utilisateur connecté |
+| Références vers des devices / `Site` dans les dashboards (alias) et les rule chains | Laissées telles quelles, avec un avertissement par référence non résoluble |
+| Entity views | Il n'y en a pas ; non gérées |
+| Entity groups | Synchronisés, y compris les groupes vides. Seuls les membres synchronisés sont ajoutés. Les devices et assets de la cible ne sont jamais retirés de leurs groupes. Un groupe qui contient des assets ou des devices de la cible n'est jamais supprimé |
+| Relation présente dans la source et dans la cible | La source l'emporte (`additionalInfo` écrasé) |
+| `calculatedFields` avec références vers des devices / `Site` | Synchronisés tels quels, avec un avertissement par référence |
+| Attributs (`SERVER_SCOPE`) | Ceux de la source sont écrits (création ou mise à jour). Ceux qui n'existent que dans la cible sont conservés et jamais supprimés |
+| Permissions des groupes d'utilisateurs (`permissions`) | Créées seulement si elles n'existent pas dans la cible ; les permissions existantes ne sont ni modifiées ni supprimées |
+| Client REST | `tb-pe-client` (PyPI, 4.3.1.x, Python >= 3.10), classe `tb_pe_client.ThingsboardClient(url, username, password)` |
+| Identifiants de connexion | Utilisateur et mot de passe, fournis par des variables d'environnement de la pipeline |
+| Journalisation | Sortie standard uniquement |
+| Tests | Tests unitaires avec mocks, sans instance réelle |
+| Langue | Documentation, commentaires et messages de l'outil en français |
 
-## Decisiones de implementación (a revisar)
+## Décisions d'implémentation (à valider)
 
-Tomadas durante el desarrollo, no discutidas explícitamente:
+Ces décisions ont été prises pendant le développement, sans discussion explicite :
 
-| Tema | Decisión |
+| Sujet | Décision |
 |---|---|
-| Relaciones con devices | Nunca se crean desde el origen, aunque el device exista en el destino (mismo tenant) |
-| Emparejado por nombre | Si no coincide `id` ni `externalId`, se empareja por nombre cuando hay un único candidato (rule chain raíz, profiles `default`, grupos creados automáticamente por TB…) |
-| Grupos "All" | Solo se emparejan; nunca se crean, modifican ni borran |
-| Customers | No se borra un customer que tenga assets o devices (TB PE los borraría en cascada) ni el customer público |
-| Calculated fields | Gana el origen. Se borran los sobrantes, salvo en assets |
-| Integraciones | Si al crear una el `routingKey` ya está en uso en la instancia, se crea con uno nuevo y se avisa |
-| Nodos de rule chain | Se recrean (sin IDs de nodo) cada vez que se guarda la metadata |
-| Rule chain raíz / profile por defecto | Se marcan con sus endpoints propios si el origen lo indica |
-| Borrados fallidos | Por ejemplo, un profile en uso: se registran como aviso, no como error |
+| Relations avec des devices | Jamais créées depuis la source, même si le device existe dans la cible (même tenant) |
+| Rapprochement par nom | Si ni l'`id` ni l'`externalId` ne correspondent, rapprochement par nom quand il n'y a qu'un seul candidat. Cela couvre la rule chain racine, les profiles par défaut et les groupes créés automatiquement par TB |
+| Groupes « All » | Seulement rapprochés ; jamais créés, modifiés ni supprimés |
+| Customers | Ni un customer qui possède des assets ou des devices (TB PE les supprimerait en cascade), ni le customer public ne sont supprimés |
+| Calculated fields | La source l'emporte. Ceux en trop sont supprimés, sauf sur les assets |
+| Intégrations | Si le `routingKey` est déjà utilisé sur l'instance lors de la création, l'intégration est créée avec une nouvelle clé et un avertissement est émis |
+| Nœuds des rule chains | Recréés (sans identifiants de nœud) à chaque enregistrement des métadonnées |
+| Rule chain racine / profile par défaut | Définis via leurs propres endpoints si la source l'indique |
+| Échecs de suppression | Par exemple un profile encore utilisé : enregistrés comme avertissement, pas comme erreur |
 
-## Pendiente
+## Reste à faire
 
-- Validar los formatos con ficheros reales del repo VC, sobre todo `groups/` y los tipos exclusivos de PE.
-- Probar contra una instancia real de ThingsBoard 4.3.0 PE (primero con `--dry-run`).
+- Valider les formats avec de vrais fichiers du dépôt VC, en particulier `groups/` et les types propres à PE.
+- Tester contre une vraie instance ThingsBoard 4.3.0 PE, d'abord avec `--dry-run`.
 
-## Estructura del repo origen (Version Control)
+## Structure du dépôt source (Version Control)
 
-Cada carpeta final contiene un JSON por entidad, con nombre `<externalId>.json`.
-Cada tipo tiene su propio formato de JSON (pendiente de recibir ejemplos).
+Chaque dossier final contient un fichier JSON par entité, nommé `<externalId>.json`.
 
 ```
 asset/  asset_profile/  converter/  customer/  dashboard/  device/  device_profile/
@@ -68,88 +69,94 @@ hierarchy/<ID>/dashboard/
 hierarchy/<ID>/groups/{asset,customer,dashboard,device,entity_view,user}/
 ```
 
-| Carpeta | Tratamiento |
+| Dossier | Traitement |
 |---|---|
-| `device/` | Se ignora |
-| `asset/` | Solo tipo `Risque` |
-| `groups/*`, `hierarchy/<ID>/groups/*` | Entity groups (ver reglas de grupos) |
-| `hierarchy/<ID>/...` | Entidades cuyo owner es el customer `<ID>` (customerId / ownerId). Sin anidamiento |
-| `groups/{user,device,entity_view}` | El grupo se crea aunque quede vacío (no se sincronizan sus miembros) |
-| Resto | Se sincroniza completo |
+| `device/` | Ignoré |
+| `asset/` | Type `Risque` uniquement |
+| `groups/*`, `hierarchy/<ID>/groups/*` | Entity groups (voir les règles des groupes) |
+| `hierarchy/<ID>/...` | Entités dont le propriétaire est le customer `<ID>` (customerId / ownerId). Pas d'imbrication |
+| `groups/{user,device,entity_view}` | Le groupe est créé même s'il reste vide (ses membres ne sont pas synchronisés) |
+| Autres | Synchronisés entièrement |
 
-## Formatos JSON (EntityExportData)
+## Formats JSON (EntityExportData)
 
-Fuente: repo oficial `thingsboard/thingsboard`, clase
-`common/data/.../sync/ie/EntityExportData.java` (rama `release-4.3`) y sus subclases.
-El código PE 4.3 no es público: los tipos exclusivos de PE (grupos, converter,
-integration, role) se han tomado de la rama `master`, que ya los incluye. **Validar con ficheros reales.**
+**Source.** Ces formats viennent du dépôt officiel `thingsboard/thingsboard` : la classe
+`common/data/.../sync/ie/EntityExportData.java` (branche `release-4.3`) et ses sous-classes.
 
-Estructura común a todos los ficheros (confirmada con el ejemplo de `asset_profile`):
+**À valider.** Le code PE 4.3 n'est pas public. Les types propres à PE (groupes, converter,
+integration, role) ont été repris de la branche `master`, qui les contient déjà. **Ils
+restent à valider avec de vrais fichiers.**
+
+Structure commune à tous les fichiers (confirmée par l'exemple d'`asset_profile`) :
 
 ```json
 {
   "entityType": "ASSET_PROFILE",
-  "entity": { ... },                       // la entidad tal cual la devuelve la API REST (incluye id, externalId, tenantId...)
+  "entity": { ... },                       // l'entité telle que la renvoie l'API REST (id, externalId, tenantId...)
   "relations": [ EntityRelation ],          // {from:{entityType,id}, to:{entityType,id}, type, typeGroup, additionalInfo}
   "attributes": { "SERVER_SCOPE": [ AttributeExportData ] },
   "calculatedFields": [ CalculatedField ]
 }
 ```
 
-`AttributeExportData`: `key`, `lastUpdateTs`, y uno de `booleanValue` / `strValue` /
-`longValue` / `doubleValue` / `jsonValue`.
+Champs d'un `AttributeExportData` :
+- `key` et `lastUpdateTs` ;
+- un seul champ de valeur parmi `booleanValue`, `strValue`, `longValue`, `doubleValue` et `jsonValue`.
 
-Campos adicionales por tipo:
+Champs supplémentaires par type :
 
-| entityType | Campos extra | Notas para la sincronización |
+| entityType | Champs supplémentaires | Traitement |
 |---|---|---|
-| `DEVICE` | `credentials` | Se ignora (no se sincronizan devices) |
-| `RULE_CHAIN` | `metaData` (`firstNodeIndex`, `nodes`, `connections`, `ruleChainConnections`) | Se guarda la cadena y luego su metadata; los nodos pueden referenciar otras rule chains, devices o assets |
-| `WIDGET_TYPE` | — | `entity` es un `WidgetTypeDetails` |
-| `WIDGETS_BUNDLE` | `widgets` (lista de widget types), `fqns` (lista de FQN de widgets) | Se asocian los widget types al bundle por FQN |
-| `ENTITY_GROUP` | `permissions` (solo grupos USER), `groupOtaPackages` (solo grupos DEVICE), `groupEntities`, `memberIds` (externalIds de los miembros) | `memberIds` filtrado a entidades sincronizadas; `groupOtaPackages` se ignora (sin OTA) |
-| `DASHBOARD` | — | `entity.configuration.entityAliases` puede contener IDs de devices/`Site` → warning |
-| `ASSET`, `ASSET_PROFILE`, `DEVICE_PROFILE`, `CUSTOMER`, `TB_RESOURCE`, `NOTIFICATION_*`, `CONVERTER`, `INTEGRATION`, `ROLE` | — | Solo la estructura común |
+| `DEVICE` | `credentials` | Ignoré (pas de synchronisation des devices) |
+| `RULE_CHAIN` | `metaData` (`firstNodeIndex`, `nodes`, `connections`, `ruleChainConnections`) | La chaîne est enregistrée, puis ses métadonnées |
+| `WIDGET_TYPE` | — | `entity` est un `WidgetTypeDetails` |
+| `WIDGETS_BUNDLE` | `widgets` (liste de widget types), `fqns` (FQN des widgets) | Les widget types sont associés au bundle par FQN |
+| `ENTITY_GROUP` | `permissions` (groupes USER), `groupOtaPackages` (groupes DEVICE), `groupEntities`, `memberIds` (externalIds des membres) | `memberIds` filtré aux entités synchronisées ; `groupOtaPackages` ignoré |
+| `DASHBOARD` | — | `entity.configuration.entityAliases` peut contenir des identifiants de devices / `Site` : avertissement |
+| `ASSET`, `ASSET_PROFILE`, `DEVICE_PROFILE`, `CUSTOMER`, `TB_RESOURCE`, `NOTIFICATION_*`, `CONVERTER`, `INTEGRATION`, `ROLE` | — | Structure commune uniquement |
 
-## Estructura del proyecto
+## Structure du projet
 
 ```
 syncTB/
-├── setup.py              # paquete "synctb", comando de consola "synctb"
+├── setup.py              # paquet « synctb », commande console « synctb »
 ├── requirements.txt      # tb-pe-client
 ├── requirements-dev.txt  # + pytest
 ├── README.md
 ├── synctb/
-│   ├── cli.py            # argparse, logging y códigos de salida
-│   ├── config.py         # argumentos + variables de entorno
-│   ├── model.py          # SourceEntity, SourceRepository, carpetas -> tipos
-│   ├── repo.py           # lectura del repo VC
-│   ├── filters.py        # exclusión de usuarios, devices y assets != Risque
-│   ├── api.py            # REST en crudo sobre tb_pe_client.ThingsboardClient (+ dry-run)
-│   ├── specs.py          # endpoints por tipo, orden de sincronización y de borrado
-│   ├── idmap.py          # tabla origen -> destino y reescritura de UUID en el JSON
-│   ├── syncer.py         # orquestación
-│   └── report.py         # contadores y resumen final
-└── tests/                # pytest con un ThingsBoard falso en memoria
+│   ├── cli.py            # argparse, log et codes de sortie
+│   ├── config.py         # arguments + variables d'environnement
+│   ├── model.py          # SourceEntity, SourceRepository, dossiers -> types
+│   ├── repo.py           # lecture du dépôt VC
+│   ├── filters.py        # exclusion des utilisateurs, devices et assets non « Risque »
+│   ├── api.py            # REST brut au-dessus de tb_pe_client.ThingsboardClient (+ dry-run)
+│   ├── specs.py          # endpoints par type, ordre de synchronisation et de suppression
+│   ├── idmap.py          # table source -> cible et réécriture des UUID dans le JSON
+│   ├── syncer.py         # orchestration
+│   └── report.py         # compteurs et résumé final
+└── tests/                # pytest avec un faux ThingsBoard en mémoire
 ```
 
-## Flujo implementado
+## Déroulement implémenté
 
-1. Leer el repo VC y aplicar los filtros.
-2. Login como tenant admin y comprobar que el nombre del tenant coincide con `--tenant`.
-3. Cargar las entidades existentes en el destino, incluidos los devices (solo para comprobar referencias) y los grupos de cada owner.
-4. Crear o actualizar en orden de dependencias:
-   resources → widget types → bundles → customers → roles → rule chains → dashboards →
-   asset/device profiles → converters → integrations → entity groups → assets `Risque` →
+1. **Lecture.** Lire le dépôt VC et appliquer les filtres.
+2. **Vérification.** Se connecter en tant que tenant admin et vérifier que le nom du tenant correspond à `--tenant`.
+3. **Chargement de la cible.** Charger les entités existantes de la cible. Les devices servent uniquement à vérifier les références. Les groupes sont chargés pour chaque propriétaire.
+4. **Création et mise à jour**, dans l'ordre des dépendances :
+   resources → widget types → bundles → customers → rôles → rule chains → dashboards →
+   asset/device profiles → converters → intégrations → entity groups → assets `Risque` →
    notification targets/templates/rules.
-   - Se empareja por `id`, luego `externalId` y luego nombre.
-   - Todos los UUID mapeados se reescriben en el JSON.
-   - Las entidades nuevas guardan `externalId` = id de origen.
-5. Segunda pasada para las entidades que referenciaban algo que aún no existía.
-6. Metadata y raíz de rule chains, widgets de bundles, miembros y permisos de grupos,
-   relaciones, atributos `SERVER_SCOPE` y calculated fields.
-7. Borrar lo sobrante en orden inverso, con protecciones.
-8. Resumen por tipo con creados, actualizados, borrados, mantenidos y fallidos.
-   Código de salida: 0 correcto, 1 errores de entidades, 2 configuración, 3 fatal.
+   - Rapprochement par `id`, puis `externalId`, puis nom.
+   - Réécriture de tous les UUID connus dans le JSON.
+   - Les nouvelles entités enregistrent `externalId` = id source.
+5. **Seconde passe.** Réenregistrer les entités qui faisaient référence à une entité qui n'existait pas encore.
+6. **Contenu associé.**
+   - Métadonnées et racine des rule chains.
+   - Widgets des bundles.
+   - Membres et permissions des groupes.
+   - Relations, attributs `SERVER_SCOPE` et calculated fields.
+7. **Suppression.** Supprimer ce qui est en trop, dans l'ordre inverse et avec des protections.
+8. **Résumé.** Afficher un résumé par type (créés, mis à jour, supprimés, conservés, échecs).
+   Codes de sortie : 0 succès, 1 erreurs sur des entités, 2 configuration, 3 erreur fatale.
 
-Con `--dry-run` las escrituras no se envían. Se registran en DEBUG y el proceso sigue con IDs ficticios.
+**Mode `--dry-run`.** Aucune écriture n'est envoyée : chaque écriture est tracée au niveau DEBUG et le traitement continue avec des identifiants fictifs.

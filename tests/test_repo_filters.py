@@ -24,7 +24,7 @@ def test_filters_keep_only_risque_assets_and_drop_devices(tmp_path):
     site_profile = write(tmp_path, "asset_profile", export("ASSET_PROFILE", src_entity("ASSET_PROFILE", name="Site")))
     risque = write(tmp_path, "asset", export("ASSET", src_entity("ASSET", name="r", type="Risque")))
     site = write(tmp_path, "asset", export("ASSET", src_entity("ASSET", name="s", type="Site")))
-    # Sin campo type: se resuelve por el nombre de su asset profile
+    # Sans champ type : le type est déduit du nom de son asset profile
     site2 = write(tmp_path, "asset", export("ASSET", src_entity(
         "ASSET", name="s2", assetProfileId={"entityType": "ASSET_PROFILE", "id": site_profile})))
     device = write(tmp_path, "device", export("DEVICE", src_entity("DEVICE", name="d")))
